@@ -1,0 +1,11 @@
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #e5e7eb;
+}
+
+button {
+  margin-top: 28rpx;
+}
+

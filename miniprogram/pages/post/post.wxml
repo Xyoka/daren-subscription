@@ -1,0 +1,10 @@
+<view class="page">
+  <view wx:if="{{!post}}" class="empty">加载中</view>
+  <view wx:else class="panel">
+    <view class="title">{{post.account_name}}</view>
+    <view class="muted">{{post.publish_time}}</view>
+    <view class="content">{{post.content}}</view>
+    <button class="primary" bindtap="copyLink">复制雪球原文链接</button>
+  </view>
+</view>
+

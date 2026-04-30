@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <title>达人订阅后台</title>
+    <link rel="stylesheet" href="/static/admin.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>达人订阅后台</h1>
+      <form method="post" action="/admin/logout"><button type="submit">退出</button></form>
+    </header>
+
+    <main class="layout">
+      <section>
+        <h2>用户</h2>
+        <table>
+          <thead><tr><th>ID</th><th>OpenID</th><th>类型</th><th>状态</th><th>白名单</th><th>今日推送</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td>{{ usage_by_user.get(user.id, 0) }}</td>
+              <td class="mono">{{ user.openid }}</td>
+              <td>{{ user.user_type }}</td>
+              <td>{{ user.status }}</td>
+              <td>{{ "是" if user.is_whitelisted else "否" }}</td>
+              <td>{{ user.id }}</td>
+              <td>
+                <form method="post" action="/admin/users/{{ user.id }}" class="inline-form">
+                  <select name="user_type">
+                    <option value="free" {% if user.user_type == "free" %}selected{% endif %}>免费</option>
+                    <option value="member" {% if user.user_type == "member" %}selected{% endif %}>会员</option>
+                  </select>
+                  <select name="status_value">
+                    <option value="active" {% if user.status == "active" %}selected{% endif %}>启用</option>
+                    <option value="disabled" {% if user.status == "disabled" %}selected{% endif %}>禁用</option>
+                  </select>
+                  <label class="check"><input type="checkbox" name="is_whitelisted" {% if user.is_whitelisted %}checked{% endif %}>白名单</label>
+                  <label class="check"><input type="checkbox" name="reset_usage">重置额度</label>
+                  <button type="submit">保存</button>
+                </form>
+                <form method="post" action="/admin/test-push" class="inline-form">
+                  <input type="hidden" name="user_id" value="{{ user.id }}">
+                  <button type="submit">测试推送</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>博主</h2>
+        <form method="post" action="/admin/accounts" class="grid-form">
+          <input name="name" placeholder="名称" required>
+          <input name="xueqiu_user_id" placeholder="雪球用户 ID">
+          <input name="profile_url" placeholder="主页 URL" required>
+          <input name="remark" placeholder="备注">
+          <button type="submit">新增</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>名称</th><th>状态</th><th>基线</th><th>最近抓取</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for account in accounts %}
+            <tr>
+              <td>{{ account.id }}</td>
+              <td>{{ account.name }}</td>
+              <td>{{ account.status }}</td>
+              <td>{{ "已建立" if account.is_baselined else "未建立" }}</td>
+              <td>{{ account.last_crawl_time or "-" }}</td>
+              <td>
+                <form method="post" action="/admin/accounts/{{ account.id }}" class="inline-form">
+                  <input name="name" value="{{ account.name }}" required>
+                  <input name="xueqiu_user_id" value="{{ account.xueqiu_user_id or '' }}" placeholder="雪球用户 ID">
+                  <input name="profile_url" value="{{ account.profile_url }}" required>
+                  <input name="remark" value="{{ account.remark or '' }}" placeholder="备注">
+                  <select name="status_value">
+                    <option value="active" {% if account.status == "active" %}selected{% endif %}>启用</option>
+                    <option value="inactive" {% if account.status == "inactive" %}selected{% endif %}>停用</option>
+                  </select>
+                  <label class="check"><input type="checkbox" name="reset_baseline">重建基线</label>
+                  <button type="submit">保存</button>
+                </form>
+                <form method="post" action="/admin/accounts/{{ account.id }}/crawl-test" class="inline-form">
+                  <button type="submit">抓取测试</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>最近帖子</h2>
+        <table>
+          <thead><tr><th>ID</th><th>博主</th><th>发布时间</th><th>状态</th><th>正文</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for post in posts %}
+            <tr>
+              <td>{{ post.id }}</td>
+              <td>{{ post.source_account.name }}</td>
+              <td>{{ post.publish_time }}</td>
+              <td>{{ "隐藏" if post.is_hidden else "可见" }}{% if post.is_baseline %} / 基线{% endif %}</td>
+              <td>{{ post.content[:120] }}</td>
+              <td>
+                <form method="post" action="/admin/posts/{{ post.id }}/toggle-hidden" class="inline-form">
+                  <button type="submit">{{ "取消隐藏" if post.is_hidden else "隐藏" }}</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>推送日志</h2>
+        <table>
+          <thead><tr><th>ID</th><th>用户</th><th>帖子</th><th>状态</th><th>原因</th><th>时间</th></tr></thead>
+          <tbody>
+            {% for log in push_logs %}
+            <tr>
+              <td>{{ log.id }}</td><td>{{ log.user_id }}</td><td>{{ log.post_id }}</td><td>{{ log.push_status }}</td><td>{{ log.fail_reason or "-" }}</td><td>{{ log.push_time or log.created_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>抓取日志</h2>
+        <table>
+          <thead><tr><th>ID</th><th>博主</th><th>状态</th><th>新贴</th><th>错误</th><th>耗时</th><th>时间</th></tr></thead>
+          <tbody>
+            {% for log in crawl_logs %}
+            <tr>
+              <td>{{ log.id }}</td><td>{{ log.source_account_id }}</td><td>{{ log.status }}</td><td>{{ log.found_new_post_count }}</td><td>{{ log.error_message or "-" }}</td><td>{{ log.duration_ms or "-" }}ms</td><td>{{ log.crawl_time }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

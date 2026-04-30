@@ -1,0 +1,21 @@
+.record {
+  cursor: pointer;
+}
+
+.record-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 14rpx;
+}
+
+.name {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.preview {
+  line-height: 1.6;
+  color: #374151;
+}
+

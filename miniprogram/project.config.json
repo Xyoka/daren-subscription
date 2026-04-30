@@ -1,0 +1,14 @@
+{
+  "appid": "touristappid",
+  "projectname": "达人订阅",
+  "miniprogramRoot": "./",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram"
+}
+

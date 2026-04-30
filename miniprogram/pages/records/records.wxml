@@ -1,0 +1,11 @@
+<view class="page">
+  <view wx:if="{{records.length === 0}}" class="empty">暂无推送记录</view>
+  <view wx:for="{{records}}" wx:key="id" class="panel record" data-id="{{item.post_id}}" bindtap="openPost">
+    <view class="record-head">
+      <view class="name">{{item.account_name}}</view>
+      <view class="muted">{{item.publish_time}}</view>
+    </view>
+    <view class="preview">{{item.preview}}</view>
+  </view>
+</view>
+

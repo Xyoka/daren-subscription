@@ -1,0 +1,35 @@
+.intro {
+  border-left: 6rpx solid #2563eb;
+}
+
+.account-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.account-name {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.badge {
+  flex: none;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 24rpx;
+}
+
+.badge.on {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.link {
+  margin-top: 16rpx;
+  overflow-wrap: anywhere;
+}
+

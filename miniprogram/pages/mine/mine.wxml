@@ -1,0 +1,13 @@
+<view class="page">
+  <view wx:if="{{!me}}" class="empty">加载中</view>
+  <view wx:else class="panel">
+    <view class="title">我的权益</view>
+    <view class="row"><text>内测白名单</text><text>{{me.is_whitelisted ? "已加入" : "未加入"}}</text></view>
+    <view class="row"><text>用户类型</text><text>{{me.user_type === "member" ? "会员" : "免费"}}</text></view>
+    <view class="row"><text>订阅数量</text><text>{{me.subscription_count}}</text></view>
+    <view class="row"><text>今日推送</text><text>{{me.daily_push_count}} / {{me.daily_push_limit}}</text></view>
+    <view class="row"><text>可用提醒授权</text><text>{{me.message_authorized_count}}</text></view>
+    <button class="secondary" bindtap="reload">刷新</button>
+  </view>
+</view>
+

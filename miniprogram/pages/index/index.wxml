@@ -1,0 +1,34 @@
+<view class="page">
+  <view wx:if="{{!ready}}" class="empty">加载中</view>
+
+  <view wx:elif="{{!isWhitelisted}}" class="panel">
+    <view class="title">内测中</view>
+    <view class="muted">当前账号尚未加入体验白名单。</view>
+  </view>
+
+  <block wx:else>
+    <view class="panel intro">
+      <view class="title">预置博主</view>
+      <view class="muted">订阅后，请授权小程序订阅消息，系统发现新主贴时会发送提醒。</view>
+    </view>
+
+    <view wx:if="{{accounts.length === 0}}" class="empty">暂无可订阅博主</view>
+
+    <view wx:for="{{accounts}}" wx:key="id" class="panel account">
+      <view class="account-head">
+        <view>
+          <view class="account-name">{{item.name}}</view>
+          <view class="muted">{{item.remark || "雪球博主"}}</view>
+        </view>
+        <view class="badge {{item.is_subscribed ? 'on' : ''}}">{{item.is_subscribed ? "已订阅" : "未订阅"}}</view>
+      </view>
+      <view class="muted link">{{item.profile_url}}</view>
+      <view class="button-row">
+        <button wx:if="{{!item.is_subscribed}}" class="primary" size="mini" data-id="{{item.id}}" bindtap="subscribe">订阅并授权</button>
+        <button wx:else class="danger" size="mini" data-id="{{item.id}}" bindtap="unsubscribe">取消订阅</button>
+        <button class="secondary" size="mini" bindtap="authorizeReminder">开启提醒</button>
+      </view>
+    </view>
+  </block>
+</view>
+
