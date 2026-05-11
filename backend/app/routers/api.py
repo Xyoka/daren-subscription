@@ -21,6 +21,7 @@ from app.security import create_user_token, utcnow
 from app.services import quota
 from app.services.push import preview_text
 from app.services.wechat import WechatError, code_to_openid
+from app.time_utils import format_local_time
 
 router = APIRouter(prefix="/api")
 
@@ -169,9 +170,9 @@ def push_records(user: User = Depends(whitelisted_user), db: Session = Depends(g
             id=record.id,
             post_id=record.post_id,
             account_name=record.post.source_account.name,
-            publish_time=record.post.publish_time,
+            publish_time=format_local_time(record.post.publish_time),
             preview=preview_text(record.post.content),
-            push_time=record.push_time,
+            push_time=format_local_time(record.push_time) if record.push_time else None,
         )
         for record in records
     ]
@@ -192,7 +193,7 @@ def post_detail(post_id: int, user: User = Depends(whitelisted_user), db: Sessio
     return PostOut(
         id=post.id,
         account_name=post.source_account.name,
-        publish_time=post.publish_time,
+        publish_time=format_local_time(post.publish_time),
         content=post.content,
         original_url=post.original_url,
     )

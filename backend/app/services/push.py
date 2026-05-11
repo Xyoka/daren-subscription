@@ -10,7 +10,9 @@ from app.services.wechat import send_subscribe_message
 
 
 def preview_text(content: str, length: int = 80) -> str:
-    return content.replace("\n", " ").strip()[:length]
+    from app.services.crawler import clean_html
+
+    return clean_html(content).replace("\n", " ").strip()[:length]
 
 
 async def dispatch_post(db: Session, post: Post) -> int:
@@ -56,16 +58,27 @@ async def dispatch_post(db: Session, post: Post) -> int:
 
         auth = get_available_authorization(db, user.id)
         if not auth:
-            db.add(
-                PushRecord(
+            if settings.wechat_dry_run:
+                # 开发模式下自动创建授权记录，方便端到端测试
+                auth = MessageAuthorization(
                     user_id=user.id,
-                    post_id=post.id,
-                    push_status="failed",
-                    fail_reason="no available subscribe message authorization",
+                    template_id="dev_dry_run",
+                    status="accept",
+                    available_count=999,
                 )
-            )
-            db.flush()
-            continue
+                db.add(auth)
+                db.flush()
+            else:
+                db.add(
+                    PushRecord(
+                        user_id=user.id,
+                        post_id=post.id,
+                        push_status="failed",
+                        fail_reason="no available subscribe message authorization",
+                    )
+                )
+                db.flush()
+                continue
 
         ok, error = await send_subscribe_message(
             openid=user.openid,

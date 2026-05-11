@@ -8,4 +8,9 @@ __pycache__/
 backend/.env
 node_modules/
 dist/
+.codebuddy/
+miniprogram/project.private.config.json
+miniprogram/user.env
+*.log
+/tmp/
 

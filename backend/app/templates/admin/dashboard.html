@@ -12,6 +12,12 @@
     </header>
 
     <main class="layout">
+      {% if success %}
+      <div class="msg success">{{ success }}</div>
+      {% endif %}
+      {% if error %}
+      <div class="msg error">{{ error }}</div>
+      {% endif %}
       <section>
         <h2>用户</h2>
         <table>
@@ -68,7 +74,7 @@
               <td>{{ account.name }}</td>
               <td>{{ account.status }}</td>
               <td>{{ "已建立" if account.is_baselined else "未建立" }}</td>
-              <td>{{ account.last_crawl_time or "-" }}</td>
+              <td>{{ account.last_crawl_time | local_time }}</td>
               <td>
                 <form method="post" action="/admin/accounts/{{ account.id }}" class="inline-form">
                   <input name="name" value="{{ account.name }}" required>
@@ -101,9 +107,9 @@
             <tr>
               <td>{{ post.id }}</td>
               <td>{{ post.source_account.name }}</td>
-              <td>{{ post.publish_time }}</td>
+              <td>{{ post.publish_time | local_time }}</td>
               <td>{{ "隐藏" if post.is_hidden else "可见" }}{% if post.is_baseline %} / 基线{% endif %}</td>
-              <td>{{ post.content[:120] }}</td>
+              <td>{{ post.content | clean_html }}</td>
               <td>
                 <form method="post" action="/admin/posts/{{ post.id }}/toggle-hidden" class="inline-form">
                   <button type="submit">{{ "取消隐藏" if post.is_hidden else "隐藏" }}</button>
@@ -122,7 +128,7 @@
           <tbody>
             {% for log in push_logs %}
             <tr>
-              <td>{{ log.id }}</td><td>{{ log.user_id }}</td><td>{{ log.post_id }}</td><td>{{ log.push_status }}</td><td>{{ log.fail_reason or "-" }}</td><td>{{ log.push_time or log.created_at }}</td>
+              <td>{{ log.id }}</td><td>{{ log.user_id }}</td><td>{{ log.post_id }}</td><td>{{ log.push_status }}</td><td>{{ log.fail_reason or "-" }}</td><td>{{ log.push_time | default(log.created_at) | local_time }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -136,7 +142,7 @@
           <tbody>
             {% for log in crawl_logs %}
             <tr>
-              <td>{{ log.id }}</td><td>{{ log.source_account_id }}</td><td>{{ log.status }}</td><td>{{ log.found_new_post_count }}</td><td>{{ log.error_message or "-" }}</td><td>{{ log.duration_ms or "-" }}ms</td><td>{{ log.crawl_time }}</td>
+              <td>{{ log.id }}</td><td>{{ log.source_account_id }}</td><td>{{ log.status }}</td><td>{{ log.found_new_post_count }}</td><td>{{ log.error_message or "-" }}</td><td>{{ log.duration_ms or "-" }}ms</td><td>{{ log.crawl_time | local_time }}</td>
             </tr>
             {% endfor %}
           </tbody>

@@ -50,15 +50,15 @@ class PushRecordOut(BaseModel):
     id: int
     post_id: int
     account_name: str
-    publish_time: datetime
+    publish_time: str
     preview: str
-    push_time: datetime | None
+    push_time: str | None
 
 
 class PostOut(BaseModel):
     id: int
     account_name: str
-    publish_time: datetime
+    publish_time: str
     content: str
     original_url: str
 

@@ -11,12 +11,16 @@ from app.config import settings
 from app.db import get_db
 from app.models import CrawlLog, MessageAuthorization, Post, PushRecord, SourceAccount, Subscription, User
 from app.security import create_admin_token, verify_admin_request
+from app.services.crawler import clean_html
 from app.services.quota import get_daily_usage
 from app.services.wechat import send_subscribe_message
 from app.services.worker import process_account
+from app.time_utils import format_local_time
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
+templates.env.filters["clean_html"] = lambda v: clean_html(v) if v else ""
+templates.env.filters["local_time"] = format_local_time
 
 
 def redirect(path: str = "/admin") -> RedirectResponse:
@@ -49,7 +53,7 @@ def logout() -> RedirectResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+def dashboard(request: Request, error: str = "", success: str = "", db: Session = Depends(get_db)) -> HTMLResponse:
     verify_admin_request(request)
     users = db.scalars(select(User).order_by(User.id.desc()).limit(20)).all()
     usage_by_user = {user.id: get_daily_usage(db, user.id).success_push_count for user in users}
@@ -63,6 +67,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
             "posts": db.scalars(select(Post).order_by(Post.id.desc()).limit(20)).all(),
             "push_logs": db.scalars(select(PushRecord).order_by(PushRecord.id.desc()).limit(20)).all(),
             "crawl_logs": db.scalars(select(CrawlLog).order_by(CrawlLog.id.desc()).limit(20)).all(),
+            "error": error,
+            "success": success,
         },
     )
 
@@ -142,13 +148,28 @@ def update_account(
 
 
 @router.post("/accounts/{account_id}/crawl-test")
-async def crawl_test(request: Request, account_id: int, db: Session = Depends(get_db)) -> RedirectResponse:
+async def crawl_test(request: Request, account_id: int, db: Session = Depends(get_db)):
     verify_admin_request(request)
     account = db.get(SourceAccount, account_id)
     if not account:
         raise HTTPException(status_code=404)
-    await process_account(db, account)
-    return redirect()
+    try:
+        await process_account(db, account)
+        return redirect("/admin?success=抓取测试完成")
+    except RuntimeError as exc:
+        error_msg = str(exc)
+        if "WAF" in error_msg or "XUEQIU_COOKIE" in error_msg:
+            try:
+                from app.services.browser_crawler import XueqiuBrowserCrawler
+
+                browser = XueqiuBrowserCrawler()
+                await browser.ensure_initialized()
+                await process_account(db, account, browser_crawler=browser)
+                await browser.close()
+                return redirect("/admin?success=抓取测试完成（浏览器模式）")
+            except Exception as browser_exc:
+                pass
+        return redirect(f"/admin?error=抓取失败：{error_msg[:200]}")
 
 
 @router.post("/posts/{post_id}/toggle-hidden")

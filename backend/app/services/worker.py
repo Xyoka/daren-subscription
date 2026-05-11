@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -12,9 +13,32 @@ from app.security import utcnow
 from app.services.crawler import PostCandidate, XueqiuCrawler
 from app.services.push import dispatch_post
 
+logger = logging.getLogger(__name__)
 
-async def process_account(db: Session, account: SourceAccount, crawler: XueqiuCrawler | None = None) -> int:
+
+async def process_account(
+    db: Session,
+    account: SourceAccount,
+    crawler: XueqiuCrawler | None = None,
+    browser_crawler=None,
+) -> int:
+    # 先用 httpx 爬虫尝试（支持 acw_sc__v2 或 Cookie）
     crawler = crawler or XueqiuCrawler()
+    try:
+        return await _do_process(db, account, crawler)
+    except RuntimeError as exc:
+        error_msg = str(exc)
+        # 如果是因为 WAF 导致失败，降级到浏览器爬虫
+        if "WAF" in error_msg or "XUEQIU_COOKIE" in error_msg:
+            if browser_crawler:
+                logger.info("httpx crawler blocked by WAF, falling back to browser crawler for account %s", account.name)
+                return await _do_process(db, account, browser_crawler)
+            else:
+                logger.warning("Browser crawler not available for account %s", account.name)
+        raise
+
+
+async def _do_process(db: Session, account: SourceAccount, crawler) -> int:
     try:
         result = await crawler.fetch_latest_posts(account.xueqiu_user_id, account.profile_url, settings.crawl_post_limit)
         candidates = sorted(result.posts, key=lambda item: item.publish_time)
@@ -118,14 +142,27 @@ def find_existing_post(db: Session, account_id: int, candidate: PostCandidate) -
     )
 
 
-async def run_once() -> int:
+async def run_once(browser_crawler=None) -> int:
     init_db()
     db = SessionLocal()
     try:
         accounts = db.scalars(select(SourceAccount).where(SourceAccount.status == "active")).all()
         total = 0
         for account in accounts:
-            total += await process_account(db, account)
+            try:
+                total += await process_account(db, account, browser_crawler=browser_crawler)
+            except Exception as exc:
+                logger.error("Crawl failed for account %s: %s", account.name, exc)
+                db.rollback()
+                db.add(
+                    CrawlLog(
+                        source_account_id=account.id,
+                        crawl_time=utcnow(),
+                        status="failed",
+                        error_message=str(exc),
+                    )
+                )
+                db.commit()
         cleanup_old_records(db)
         db.commit()
         return total
@@ -141,11 +178,24 @@ def cleanup_old_records(db: Session) -> None:
 
 async def main_loop() -> None:
     init_db()
+    browser = None
+    try:
+        from app.services.browser_crawler import XueqiuBrowserCrawler
+
+        browser = XueqiuBrowserCrawler()
+        logger.info("Worker started with browser-based WAF fallback.")
+    except ImportError as exc:
+        logger.warning("Playwright not available, using httpx-only mode: %s", exc)
+    except Exception as exc:
+        logger.warning("Browser init failed (will retry on demand): %s", exc)
+
     while True:
         try:
-            await run_once()
-        except Exception as exc:  # pragma: no cover
-            print(f"worker run failed: {exc}", flush=True)
+            total = await run_once(browser_crawler=browser)
+            if total:
+                logger.info("Crawl cycle complete: %d new posts pushed.", total)
+        except Exception as exc:
+            logger.error("worker run failed: %s", exc, exc_info=True)
         await asyncio.sleep(settings.crawl_interval_seconds)
 
 

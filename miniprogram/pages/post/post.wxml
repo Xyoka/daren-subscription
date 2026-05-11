@@ -3,7 +3,7 @@
   <view wx:else class="panel">
     <view class="title">{{post.account_name}}</view>
     <view class="muted">{{post.publish_time}}</view>
-    <view class="content">{{post.content}}</view>
+    <rich-text nodes="{{post.content}}" class="content" />
     <button class="primary" bindtap="copyLink">复制雪球原文链接</button>
   </view>
 </view>

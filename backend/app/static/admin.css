@@ -22,5 +22,7 @@ button:hover { background: #1d4ed8; }
 .login-card form { display: grid; gap: 14px; }
 .login-card label { display: grid; gap: 6px; }
 .login-card input, .login-card button { width: 100%; }
-.error { color: #b91c1c; background: #fee2e2; padding: 10px; border-radius: 6px; }
+.msg { padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+.msg.error { color: #b91c1c; background: #fee2e2; border: 1px solid #fecaca; }
+.msg.success { color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; }
 

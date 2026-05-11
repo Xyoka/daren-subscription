@@ -27,7 +27,12 @@ cp backend/.env.example backend/.env
 docker compose up --build
 ```
 
-生产部署前请修改 `SECRET_KEY`、管理员密码、微信小程序配置、HTTPS 域名和雪球 Cookie。
+生产部署前请修改 `SECRET_KEY`、管理员密码、微信小程序配置、HTTPS 域名。
+
+> ⚠️ **雪球 WAF 说明**：雪球网使用了阿里云 WAF 防护。爬虫默认使用 httpx，若遇到新版 WAF 挑战会**自动降级到 Playwright 无头浏览器**解决。首次使用需先安装浏览器：
+> ```bash
+> cd backend && .venv/bin/playwright install chromium
+> ```
 
 ## P0 验证顺序
 
