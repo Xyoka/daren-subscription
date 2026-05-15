@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import html
@@ -32,6 +34,7 @@ class PostCandidate:
     content: str
     publish_time: datetime
     original_url: str
+    is_pinned: bool = False
 
     @property
     def content_hash(self) -> str:
@@ -225,10 +228,28 @@ def _build_image_html(urls: list[str]) -> str:
     return "<br>" + "<br>".join(parts) if parts else ""
 
 
+def _is_pinned_item(item: dict) -> bool:
+    """识别 timeline 中的置顶帖（不同雪球接口的字段命名不一致，做宽松匹配）。"""
+    for key in ("pinned", "is_top", "top", "is_pinned", "is_sticky", "sticky"):
+        value = item.get(key)
+        if value in (1, True, "1", "true", "True"):
+            return True
+    # 雪球部分接口用 `mark` 整型表示置顶/精华等标记
+    mark = item.get("mark")
+    if isinstance(mark, int) and mark > 0:
+        return True
+    return False
+
+
 def parse_timeline_json(data: dict[str, Any], user_id: str, limit: int) -> list[PostCandidate]:
     raw_items = data.get("statuses") or data.get("list") or data.get("data", {}).get("statuses") or []
     posts: list[PostCandidate] = []
-    for item in raw_items[:limit]:
+    for item in raw_items:
+        if _is_pinned_item(item):
+            post_id = str(item.get("id") or item.get("idstr") or "") or "<unknown>"
+            logger.info("Skip pinned timeline item %s", post_id)
+            continue
+
         post_id = str(item.get("id") or item.get("idstr") or item.get("status_id") or "") or None
 
         # 获取文本内容（优先获取完整内容 longTextForIOS）
@@ -251,7 +272,10 @@ def parse_timeline_json(data: dict[str, Any], user_id: str, limit: int) -> list[
         target = item.get("target") or item.get("url") or ""
         original_url = normalize_original_url(target, user_id, post_id)
         posts.append(PostCandidate(post_id, content, publish_time, original_url))
-    return posts
+
+    # 不依赖 API 返回顺序：统一按发布时间降序后截断
+    posts.sort(key=lambda p: p.publish_time, reverse=True)
+    return posts[:limit]
 
 
 def parse_profile_html(text: str, user_id: str | None, limit: int) -> list[PostCandidate]:

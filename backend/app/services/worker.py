@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
@@ -41,14 +43,18 @@ async def process_account(
 async def _do_process(db: Session, account: SourceAccount, crawler) -> int:
     try:
         result = await crawler.fetch_latest_posts(account.xueqiu_user_id, account.profile_url, settings.crawl_post_limit)
+        # 按发布时间升序处理：推送顺序与发表顺序一致；最新的 candidate 在末尾。
         candidates = sorted(result.posts, key=lambda item: item.publish_time)
         new_count = 0
 
         if not account.is_baselined:
-            latest = candidates[-1] if candidates else None
-            if latest:
-                post = ensure_post(db, account, latest, is_baseline=True)
-                account.last_post_id = latest.xueqiu_post_id or post.content_hash
+            # 首轮抓取：把当前 timeline 可见的所有帖都标记为 baseline 入库，
+            # 这样后续轮次不会把 baseline 时见到但没入库的帖（含置顶、含较旧的几条）当成新帖。
+            latest = None
+            for candidate in candidates:
+                latest = ensure_post(db, account, candidate, is_baseline=True)
+            if latest is not None:
+                account.last_post_id = candidates[-1].xueqiu_post_id or latest.content_hash
             account.is_baselined = True
             account.last_crawl_time = utcnow()
             db.add(
@@ -64,8 +70,19 @@ async def _do_process(db: Session, account: SourceAccount, crawler) -> int:
             db.commit()
             return 0
 
+        max_age = timedelta(minutes=settings.max_post_age_minutes)
+        now = utcnow()
         for candidate in candidates:
             if find_existing_post(db, account.id, candidate):
+                continue
+            # 年龄窗口兜底：发布时间过旧的，视为换置顶/历史帖，跳过
+            if now - candidate.publish_time > max_age:
+                logger.info(
+                    "Skip stale candidate %s (age=%.0f min) for account %s",
+                    candidate.xueqiu_post_id,
+                    (now - candidate.publish_time).total_seconds() / 60,
+                    account.name,
+                )
                 continue
             post = ensure_post(db, account, candidate, is_baseline=False)
             db.flush()

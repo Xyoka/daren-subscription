@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     xueqiu_cookie: str = ""
     crawl_interval_seconds: int = 120
     crawl_post_limit: int = 5
+    # 兜底：发布时间早于 now - max_post_age_minutes 的帖子不视为新帖，避免置顶/换置顶被误推
+    max_post_age_minutes: int = 180
     retention_days: int = 30
     timezone: str = "Asia/Shanghai"
 
