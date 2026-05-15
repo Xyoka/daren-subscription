@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -181,6 +183,75 @@ def toggle_post_hidden(request: Request, post_id: int, db: Session = Depends(get
     post.is_hidden = not post.is_hidden
     db.commit()
     return redirect()
+
+
+@router.post("/posts/{post_id}/delete")
+def delete_post(request: Request, post_id: int, db: Session = Depends(get_db)) -> RedirectResponse:
+    verify_admin_request(request)
+    post = db.get(Post, post_id)
+    if not post:
+        raise HTTPException(status_code=404)
+    db.execute(delete(PushRecord).where(PushRecord.post_id == post_id))
+    db.delete(post)
+    db.commit()
+    return redirect("/admin?success=帖子已删除")
+
+
+@router.post("/accounts/{account_id}/clear-posts")
+def clear_account_posts(request: Request, account_id: int, db: Session = Depends(get_db)) -> RedirectResponse:
+    """清空该博主的全部帖子/抓取日志/推送记录，并重置基线状态。
+    保留博主本体和订阅关系，下一轮抓取会重建基线。"""
+    verify_admin_request(request)
+    account = db.get(SourceAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404)
+
+    post_ids = [pid for (pid,) in db.execute(select(Post.id).where(Post.source_account_id == account_id)).all()]
+    if post_ids:
+        db.execute(delete(PushRecord).where(PushRecord.post_id.in_(post_ids)))
+        db.execute(delete(Post).where(Post.id.in_(post_ids)))
+    db.execute(delete(CrawlLog).where(CrawlLog.source_account_id == account_id))
+    account.is_baselined = False
+    account.last_post_id = None
+    account.last_crawl_time = None
+    db.commit()
+    return redirect(f"/admin?success=已清空 {account.name} 的帖子和日志，下一轮抓取将重建基线")
+
+
+@router.post("/accounts/{account_id}/delete")
+def delete_account(request: Request, account_id: int, db: Session = Depends(get_db)) -> RedirectResponse:
+    """删除博主：级联清理帖子、抓取日志、推送记录、订阅关系，最后删除博主本体。"""
+    verify_admin_request(request)
+    account = db.get(SourceAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404)
+    name = account.name
+
+    post_ids = [pid for (pid,) in db.execute(select(Post.id).where(Post.source_account_id == account_id)).all()]
+    if post_ids:
+        db.execute(delete(PushRecord).where(PushRecord.post_id.in_(post_ids)))
+        db.execute(delete(Post).where(Post.id.in_(post_ids)))
+    db.execute(delete(CrawlLog).where(CrawlLog.source_account_id == account_id))
+    db.execute(delete(Subscription).where(Subscription.source_account_id == account_id))
+    db.delete(account)
+    db.commit()
+    return redirect(f"/admin?success=博主 {name} 已删除")
+
+
+@router.post("/crawl-logs/clear")
+def clear_crawl_logs(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+    verify_admin_request(request)
+    count = db.execute(delete(CrawlLog)).rowcount or 0
+    db.commit()
+    return redirect(f"/admin?success=已清空 {count} 条抓取日志")
+
+
+@router.post("/push-logs/clear")
+def clear_push_logs(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+    verify_admin_request(request)
+    count = db.execute(delete(PushRecord)).rowcount or 0
+    db.commit()
+    return redirect(f"/admin?success=已清空 {count} 条推送日志")
 
 
 @router.post("/test-push")
