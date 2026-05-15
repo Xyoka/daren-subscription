@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import List, Optional
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -15,30 +16,30 @@ class User(Base):
     user_type: Mapped[str] = mapped_column(String(20), default="free", index=True)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     is_whitelisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
+    subscriptions: Mapped[List["Subscription"]] = relationship(back_populates="user")
 
 
 class SourceAccount(Base):
     __tablename__ = "source_accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    xueqiu_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    xueqiu_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
     name: Mapped[str] = mapped_column(String(120), index=True)
     profile_url: Mapped[str] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     is_baselined: Mapped[bool] = mapped_column(Boolean, default=False)
-    last_crawl_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_post_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_crawl_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_post_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    remark: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="source_account")
-    posts: Mapped[list["Post"]] = relationship(back_populates="source_account")
+    subscriptions: Mapped[List["Subscription"]] = relationship(back_populates="source_account")
+    posts: Mapped[List["Post"]] = relationship(back_populates="source_account")
 
 
 class Subscription(Base):
@@ -64,7 +65,7 @@ class Post(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     source_account_id: Mapped[int] = mapped_column(ForeignKey("source_accounts.id"), index=True)
-    xueqiu_post_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
+    xueqiu_post_id: Mapped[Optional[str]] = mapped_column(String(128), unique=True, nullable=True, index=True)
     content: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     publish_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -85,8 +86,8 @@ class PushRecord(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
     push_status: Mapped[str] = mapped_column(String(30), index=True)
-    push_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    fail_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    push_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    fail_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_quota_limited: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_duplicate_blocked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -118,7 +119,7 @@ class MessageAuthorization(Base):
     template_id: Mapped[str] = mapped_column(String(128), index=True)
     status: Mapped[str] = mapped_column(String(30), default="unknown", index=True)
     available_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -133,10 +134,9 @@ class CrawlLog(Base):
     crawl_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(30), index=True)
     found_new_post_count: Mapped[int] = mapped_column(Integer, default=0)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    response_status: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     source_account: Mapped[SourceAccount] = relationship()
-

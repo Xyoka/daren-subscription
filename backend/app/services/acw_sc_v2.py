@@ -12,6 +12,8 @@ localStorage 机制的挑战。旧版 acw_sc__v2 算法（unsbox + hexXor）不�
 推荐方案：从浏览器获取雪球 Cookie 配置到 .env 文件中的 XUEQIU_COOKIE。
 """
 
+from __future__ import annotations
+
 import re
 import logging
 

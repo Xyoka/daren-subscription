@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone, timedelta
 
 from app.config import settings

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
