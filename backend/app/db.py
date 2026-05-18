@@ -11,12 +11,13 @@ class Base(DeclarativeBase):
 
 
 def _connect_args() -> dict:
-    if settings.database_url.startswith("sqlite"):
+    db_url = settings.resolved_database_url()
+    if db_url.startswith("sqlite"):
         return {"check_same_thread": False}
     return {}
 
 
-engine = create_engine(settings.database_url, connect_args=_connect_args(), pool_pre_ping=True)
+engine = create_engine(settings.resolved_database_url(), connect_args=_connect_args(), pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
 
 

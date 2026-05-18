@@ -2,9 +2,12 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 SQLAlchemy>=2.0.44,<2.1
 psycopg[binary]>=3.2.10,<3.4
+pymysql>=1.1.1,<2.0
+cryptography>=42.0.0
 pydantic-settings==2.7.1
 httpx==0.28.1
 Jinja2==3.1.5
 python-multipart==0.0.20
 itsdangerous==2.2.0
 redis==5.2.1
+playwright>=1.50.0,<2.0

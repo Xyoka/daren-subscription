@@ -14,7 +14,10 @@ APP_DIR = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    init_db()
+    try:
+        init_db()
+    except Exception as exc:
+        print(f"[WARN] init_db failed (app will still start): {exc}")
     yield
 
 

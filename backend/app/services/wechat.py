@@ -68,7 +68,7 @@ def build_subscribe_payload(openid: str, post_id: int, account_name: str, previe
         "template_id": settings.wechat_template_id,
         "page": f"pages/post/post?id={post_id}",
         "data": {
-            "thing1": {"value": account_name[:20]},
+            "thing16": {"value": account_name[:20]},
             "thing2": {"value": preview[:20]},
             "time3": {"value": publish_time},
         },

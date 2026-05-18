@@ -62,14 +62,22 @@ async def dispatch_post(db: Session, post: Post) -> int:
         if not auth:
             if settings.wechat_dry_run:
                 # 开发模式下自动创建授权记录，方便端到端测试
-                auth = MessageAuthorization(
-                    user_id=user.id,
-                    template_id="dev_dry_run",
-                    status="accept",
-                    available_count=999,
+                tpl_id = settings.wechat_template_id or "dev_dry_run"
+                auth = db.scalar(
+                    select(MessageAuthorization).where(
+                        MessageAuthorization.user_id == user.id,
+                        MessageAuthorization.template_id == tpl_id,
+                    )
                 )
-                db.add(auth)
-                db.flush()
+                if not auth:
+                    auth = MessageAuthorization(
+                        user_id=user.id,
+                        template_id=tpl_id,
+                        status="accept",
+                        available_count=999,
+                    )
+                    db.add(auth)
+                    db.flush()
             else:
                 db.add(
                     PushRecord(

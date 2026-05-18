@@ -1,5 +1,5 @@
 {
-  "appid": "wxd2f56ac61d16cb20",
+  "appid": "wx493571b4b762f0be",
   "projectname": "达人订阅",
   "miniprogramRoot": "./",
   "setting": {
@@ -33,5 +33,6 @@
     "ignore": [],
     "include": []
   },
-  "editorSetting": {}
+  "editorSetting": {},
+  "libVersion": "3.16.0"
 }
