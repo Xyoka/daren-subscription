@@ -86,10 +86,32 @@ class XueqiuBrowserCrawler:
         self._page = await self._context.new_page()
         logger.info("Browser launched successfully.")
 
+    async def _set_cookies_from_str(self, cookie_str: str) -> None:
+        """将 cookie 字符串解析并设置到浏览器上下文。"""
+        if not self._context:
+            return
+        cookies = []
+        for item in cookie_str.split(";"):
+            item = item.strip()
+            if "=" in item:
+                key, value = item.split("=", 1)
+                cookies.append({
+                    "name": key.strip(),
+                    "value": value.strip(),
+                    "domain": ".xueqiu.com",
+                    "path": "/",
+                })
+        if cookies:
+            await self._context.add_cookies(cookies)
+            logger.info("Set %d cookies on browser context.", len(cookies))
+
     async def _solve_waf(self) -> None:
         """加载雪球首页以触发并解决 WAF 挑战。"""
         logger.info("Loading xueqiu.com to solve WAF challenge...")
         try:
+            # 先设置 XUEQIU_COOKIE 再访问首页，避免 IP 被限制
+            if settings.xueqiu_cookie:
+                await self._set_cookies_from_str(settings.xueqiu_cookie)
             await self._page.goto(
                 "https://xueqiu.com/",
                 wait_until="domcontentloaded",

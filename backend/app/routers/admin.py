@@ -159,19 +159,18 @@ async def crawl_test(request: Request, account_id: int, db: Session = Depends(ge
         await process_account(db, account)
         return redirect("/admin?success=抓取测试完成")
     except RuntimeError as exc:
-        error_msg = str(exc)
-        if "WAF" in error_msg or "XUEQIU_COOKIE" in error_msg:
-            try:
-                from app.services.browser_crawler import XueqiuBrowserCrawler
+        # httpx 失败，尝试浏览器降级
+        try:
+            from app.services.browser_crawler import XueqiuBrowserCrawler
 
-                browser = XueqiuBrowserCrawler()
-                await browser.ensure_initialized()
-                await process_account(db, account, browser_crawler=browser)
-                await browser.close()
-                return redirect("/admin?success=抓取测试完成（浏览器模式）")
-            except Exception as browser_exc:
-                pass
-        return redirect(f"/admin?error=抓取失败：{error_msg[:200]}")
+            browser = XueqiuBrowserCrawler()
+            await browser.ensure_initialized()
+            await process_account(db, account, browser_crawler=browser)
+            await browser.close()
+            return redirect("/admin?success=抓取测试完成（浏览器模式）")
+        except Exception as browser_exc:
+            error_msg = str(exc)
+            return redirect(f"/admin?error=抓取失败：{error_msg[:200]}")
 
 
 @router.post("/posts/{post_id}/toggle-hidden")

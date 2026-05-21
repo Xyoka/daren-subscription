@@ -95,26 +95,32 @@ class XueqiuCrawler:
         if self._challenge_solved:
             return
 
-        # 如果有用户提供的 cookie，先设置到客户端
+        # 如果有用户提供的 cookie，直接使用，跳过首页访问（避免 cookie 被覆写）
         if self._cookie_str:
             logger.info("Using configured XUEQIU_COOKIE from .env")
             _set_cookies_from_string(client, self._cookie_str)
+            self._challenge_solved = True
+            return
 
         # 访问首页以触发/检查 WAF
         resp = await client.get("https://xueqiu.com/", headers=self._base_headers())
+
+        if resp.status_code == 403:
+            # IP 被雪球限制，httpx 无法使用，需要浏览器降级
+            raise RuntimeError(
+                "XUEQIU_IP_BLOCKED: HTTP 403 from xueqiu.com. "
+                "Plesae use browser crawler fallback."
+            )
 
         if _is_waf_response(resp.text):
             logger.info("Detected Aliyun WAF challenge...")
             solved = await self._solve_waf(client, resp.text)
             if not solved:
-                raise RuntimeError(
-                    "Failed to solve Aliyun WAF challenge for xueqiu.com.\n"
-                    "请通过以下方式解决：\n"
-                    "1. 用浏览器打开 https://xueqiu.com/ 并登录\n"
-                    "2. 打开浏览器 DevTools → Application → Cookies → xueqiu.com\n"
-                    "3. 复制所有 Cookie（如 xq_a_token、xqat、xq_id_token 等）\n"
-                    "4. 粘贴到 backend/.env 文件中的 XUEQIU_COOKIE=\n"
-                    "   示例：XUEQIU_COOKIE='xq_a_token=xxx; xqat=yyy; xq_id_token=zzz'"
+                # 新版 WAF 无法通过算法求解，但访问首页已获得 session cookie，
+                # API 端点（user_timeline.json）不需要 WAF 解决，session cookie 足够
+                logger.warning(
+                    "WAF challenge could not be solved via algorithm, "
+                    "but API calls may still work with session cookies."
                 )
         else:
             logger.info("Xueqiu session established successfully.")
@@ -126,8 +132,10 @@ class XueqiuCrawler:
         try:
             cookie_value = acw_sc_v2.solve(challenge_html)
         except RuntimeError:
-            # 新版 WAF 检测到的错误直接向上传播
-            raise
+            # 新版 WAF 无法通过算法求解，但 API 端点不需要 WAF 解决，
+            # session cookie 已足够调用 user_timeline.json
+            logger.warning("New WAF format detected, API calls may still work with session cookies.")
+            return False
 
         if not cookie_value:
             logger.error("Could not extract arg1 from WAF challenge page.")

@@ -30,12 +30,11 @@ async def process_account(
         return await _do_process(db, account, crawler)
     except RuntimeError as exc:
         error_msg = str(exc)
-        # 如果是因为 WAF 导致失败，降级到浏览器爬虫
-        if "WAF" in error_msg or "XUEQIU_COOKIE" in error_msg:
-            if browser_crawler:
-                logger.info("httpx crawler blocked by WAF, falling back to browser crawler for account %s", account.name)
-                return await _do_process(db, account, browser_crawler)
-            else:
+        # httpx 无法使用（WAF、IP封锁等），降级到浏览器爬虫
+        if browser_crawler:
+            logger.info("httpx crawler failed (%s), falling back to browser for account %s", error_msg[:60], account.name)
+            return await _do_process(db, account, browser_crawler)
+        else:
                 logger.warning("Browser crawler not available for account %s", account.name)
         raise
 
