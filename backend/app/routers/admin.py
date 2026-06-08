@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -55,9 +55,44 @@ def logout() -> RedirectResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-def dashboard(request: Request, error: str = "", success: str = "", db: Session = Depends(get_db)) -> HTMLResponse:
+def dashboard(
+    request: Request,
+    error: str = "",
+    success: str = "",
+    users_page: int = 1,
+    accounts_page: int = 1,
+    posts_page: int = 1,
+    push_page: int = 1,
+    crawl_page: int = 1,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
     verify_admin_request(request)
-    users = db.scalars(select(User).order_by(User.id.desc()).limit(20)).all()
+    per_page = 20
+
+    def _paginate(query, page_num):
+        page_num = max(1, page_num)
+        total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+        items = db.scalars(query.offset((page_num - 1) * per_page).limit(per_page)).all()
+        return items, total, page_num
+
+    # 用户（全部展示）
+    all_users = db.scalars(select(User).order_by(User.id.desc())).all()
+    users = all_users[:30]
+
+    # 各栏目分页
+    accounts, total_accounts, accounts_page = _paginate(
+        select(SourceAccount).order_by(SourceAccount.id.desc()), accounts_page
+    )
+    posts, total_posts, posts_page = _paginate(
+        select(Post).order_by(Post.id.desc()), posts_page
+    )
+    push_logs, total_push, push_page = _paginate(
+        select(PushRecord).order_by(PushRecord.id.desc()), push_page
+    )
+    crawl_logs, total_crawl, crawl_page = _paginate(
+        select(CrawlLog).order_by(CrawlLog.id.desc()), crawl_page
+    )
+
     usage_by_user = {user.id: get_daily_usage(db, user.id).success_push_count for user in users}
     return templates.TemplateResponse(
         "admin/dashboard.html",
@@ -65,12 +100,20 @@ def dashboard(request: Request, error: str = "", success: str = "", db: Session 
             "request": request,
             "users": users,
             "usage_by_user": usage_by_user,
-            "accounts": db.scalars(select(SourceAccount).order_by(SourceAccount.id.desc()).limit(20)).all(),
-            "posts": db.scalars(select(Post).order_by(Post.id.desc()).limit(20)).all(),
-            "push_logs": db.scalars(select(PushRecord).order_by(PushRecord.id.desc()).limit(20)).all(),
-            "crawl_logs": db.scalars(select(CrawlLog).order_by(CrawlLog.id.desc()).limit(20)).all(),
+            "accounts": accounts,
+            "posts": posts,
+            "push_logs": push_logs,
+            "crawl_logs": crawl_logs,
             "error": error,
             "success": success,
+            "per_page": per_page,
+            # 每个栏目的分页信息
+            "pagers": {
+                "accounts": {"page": accounts_page, "total": total_accounts, "param": "accounts_page"},
+                "posts": {"page": posts_page, "total": total_posts, "param": "posts_page"},
+                "push": {"page": push_page, "total": total_push, "param": "push_page"},
+                "crawl": {"page": crawl_page, "total": total_crawl, "param": "crawl_page"},
+            },
         },
     )
 

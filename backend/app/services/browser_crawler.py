@@ -1,13 +1,9 @@
 """
-基于 Playwright 的雪球浏览器爬虫。
+基于 Playwright 的雪球浏览器爬虫（纯浏览器方案，不依赖 XUEQIU_COOKIE）。
 
 通过无头浏览器绕过新版阿里云 WAF（renderData 模式），
-解决纯 HTTP 请求无法解决的 JS 挑战问题。
-
-使用方式：
-    crawler = XueqiuBrowserCrawler()
-    result = await crawler.fetch_latest_posts(user_id, profile_url, limit)
-    await crawler.close()
+使用 page.goto() 导航到目标页面获取完整渲染 HTML，
+无需手动维护 Cookie。
 """
 
 from __future__ import annotations
@@ -19,7 +15,6 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.config import settings
 from app.services.crawler import (
     CrawlResult,
     PostCandidate,
@@ -27,6 +22,7 @@ from app.services.crawler import (
     normalize_original_url,
     parse_publish_time,
     parse_timeline_json,
+    parse_profile_html,
     _elapsed_ms,
 )
 
@@ -42,7 +38,7 @@ Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
 
 
 class XueqiuBrowserCrawler:
-    """基于无头浏览器的雪球爬虫，可绕过新版阿里云 WAF。"""
+    """基于无头浏览器的雪球爬虫，纯浏览器方案，不依赖 Cookie。"""
 
     def __init__(self) -> None:
         self._playwright = None
@@ -86,32 +82,10 @@ class XueqiuBrowserCrawler:
         self._page = await self._context.new_page()
         logger.info("Browser launched successfully.")
 
-    async def _set_cookies_from_str(self, cookie_str: str) -> None:
-        """将 cookie 字符串解析并设置到浏览器上下文。"""
-        if not self._context:
-            return
-        cookies = []
-        for item in cookie_str.split(";"):
-            item = item.strip()
-            if "=" in item:
-                key, value = item.split("=", 1)
-                cookies.append({
-                    "name": key.strip(),
-                    "value": value.strip(),
-                    "domain": ".xueqiu.com",
-                    "path": "/",
-                })
-        if cookies:
-            await self._context.add_cookies(cookies)
-            logger.info("Set %d cookies on browser context.", len(cookies))
-
     async def _solve_waf(self) -> None:
-        """加载雪球首页以触发并解决 WAF 挑战。"""
-        logger.info("Loading xueqiu.com to solve WAF challenge...")
+        """访问雪球首页以触发并解决 WAF 挑战。"""
+        logger.info("Navigating to xueqiu.com to solve WAF...")
         try:
-            # 先设置 XUEQIU_COOKIE 再访问首页，避免 IP 被限制
-            if settings.xueqiu_cookie:
-                await self._set_cookies_from_str(settings.xueqiu_cookie)
             await self._page.goto(
                 "https://xueqiu.com/",
                 wait_until="domcontentloaded",
@@ -120,7 +94,7 @@ class XueqiuBrowserCrawler:
             # 等待 WAF 挑战的 JS 执行完成
             await self._page.wait_for_timeout(3000)
             self._initialized = True
-            logger.info("WAF challenge solved via browser.")
+            logger.info("Xueqiu homepage loaded via browser.")
         except Exception as exc:
             logger.error("Failed to load xueqiu.com: %s", exc)
             raise
@@ -131,23 +105,25 @@ class XueqiuBrowserCrawler:
         profile_url: str,
         limit: int,
     ) -> CrawlResult:
-        """获取博主最新帖子。
+        """获取博主最新帖子（纯浏览器方案）。
 
-        先在浏览器上下文中通过 API 获取，如果失败则降级解析主页 HTML。
+        优先通过浏览器内 API 获取（快速），
+        如果 API 失败（需要登录），则降级到打开博主主页获取完整渲染 HTML。
         """
         started = time.perf_counter()
         await self.ensure_initialized()
 
         user_id = xueqiu_user_id or infer_user_id(profile_url)
 
-        # 优先通过 API 获取
+        # 第 1 步：浏览器内调用 API（首次尝试，速度快）
         if user_id:
             result = await self._fetch_via_api(user_id, limit, started)
             if result is not None:
                 return result
 
-        # API 失败，降级解析主页 HTML
-        return await self._fetch_via_profile(profile_url, user_id, started)
+        # 第 2 步：API 失败，浏览器打开博主主页获取完整渲染 HTML
+        logger.info("Falling back to profile page navigation for %s", profile_url)
+        return await self._fetch_via_page_navigation(profile_url, user_id, limit, started)
 
     async def _fetch_via_api(
         self, user_id: str, limit: int, started: float
@@ -166,16 +142,21 @@ class XueqiuBrowserCrawler:
                     if (text.includes('renderData') || text.includes('aliyun_waf')) {
                         return { _waf: true };
                     }
-                    try { return JSON.parse(text); } catch(e) { return { _parseError: text.substring(0, 200) }; }
+                    try { return JSON.parse(text); } catch(e) { return { _error: text.substring(0, 200) }; }
                 }
                 """,
                 {"userId": user_id, "count": limit},
             )
 
             if isinstance(data, dict) and data.get("_waf"):
-                logger.warning("WAF re-triggered in browser, need to re-solve.")
+                logger.warning("WAF re-triggered, re-navigating...")
                 self._initialized = False
                 await self.ensure_initialized()
+                return None
+
+            # API 返回错误（如需要登录）
+            if isinstance(data, dict) and data.get("error_code"):
+                logger.info("Browser API returned error %s, falling back to page navigation.", data.get("error_code"))
                 return None
 
             posts = parse_timeline_json(data, user_id, limit)
@@ -190,34 +171,39 @@ class XueqiuBrowserCrawler:
 
         return None
 
-    async def _fetch_via_profile(
-        self, profile_url: str, user_id: str | None, started: float
+    async def _fetch_via_page_navigation(
+        self, profile_url: str, user_id: str | None, limit: int, started: float
     ) -> CrawlResult:
-        """通过浏览器加载博主主页 HTML 并解析帖子。"""
+        """通过浏览器打开博主主页，获取完整渲染 HTML 并解析帖子。
+
+        浏览器导航到博主主页后，页面会加载所有动态内容（包括帖子列表）。
+        然后获取 page.content()（完整渲染后的 HTML），从中提取帖子。
+        """
         try:
-            html = await self._page.evaluate(
-                """
-                async (url) => {
-                    const resp = await fetch(url, {
-                        credentials: 'include',
-                        headers: { 'Accept': 'text/html', 'Referer': 'https://xueqiu.com/' }
-                    });
-                    return await resp.text();
-                }
-                """,
+            # 浏览器导航到博主主页，等待页面加载完成
+            await self._page.goto(
                 profile_url,
+                wait_until="networkidle",  # 等待所有网络请求完成
+                timeout=30000,
             )
+            # 额外等待动态内容渲染
+            await self._page.wait_for_timeout(2000)
 
-            from app.services.crawler import parse_profile_html
+            # 获取完整渲染后的 HTML
+            html = await self._page.content()
 
-            posts = parse_profile_html(html, user_id, settings.crawl_post_limit)
+            posts = parse_profile_html(html, user_id, limit)
+            logger.info(
+                "Profile page navigation: found %d posts for %s",
+                len(posts), user_id or profile_url,
+            )
             return CrawlResult(
                 posts=posts,
                 response_status=200,
                 duration_ms=_elapsed_ms(started),
             )
         except Exception as exc:
-            logger.error("Browser profile fetch failed: %s", exc)
+            logger.error("Browser page navigation failed: %s", exc)
             return CrawlResult(
                 posts=[],
                 response_status=None,

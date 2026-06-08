@@ -6,6 +6,20 @@
     <link rel="stylesheet" href="/static/admin.css">
   </head>
   <body>
+  {% macro pagination(p) -%}
+  {% set pages = (p.total + per_page - 1) // per_page %}
+  {% if pages > 1 %}
+  <div class="pagination-bar">
+    {% if p.page > 1 %}
+    <a href="?{{ p.param }}={{ p.page - 1 }}&posts_page={{ pagers.posts.page }}&push_page={{ pagers.push.page }}&crawl_page={{ pagers.crawl.page }}">←</a>
+    {% endif %}
+    <span>{{ p.page }}/{{ pages }} 页（{{ p.total }} 条）</span>
+    {% if p.page < pages %}
+    <a href="?{{ p.param }}={{ p.page + 1 }}&posts_page={{ pagers.posts.page }}&push_page={{ pagers.push.page }}&crawl_page={{ pagers.crawl.page }}">→</a>
+    {% endif %}
+  </div>
+  {% endif %}
+  {%- endmacro %}
     <header class="topbar">
       <h1>达人订阅后台</h1>
       <form method="post" action="/admin/logout"><button type="submit">退出</button></form>
@@ -57,7 +71,7 @@
       </section>
 
       <section>
-        <h2>博主</h2>
+        <h2>博主 <span class="badge">{{ pagers.accounts.total }}</span></h2>
         <p class="hint">「基线」= 系统认为是历史帖、不再推送的标记。新博主首次抓取会把当时可见的帖全部入库为基线（不通知订阅者），之后只有真新帖才走推送。勾「重建基线」让下一轮重新建立基线；「清空帖子」会删该博主全部帖子/日志并重置基线。</p>
         <form method="post" action="/admin/accounts" class="grid-form">
           <input name="name" placeholder="名称" required>
@@ -105,10 +119,11 @@
             {% endfor %}
           </tbody>
         </table>
+        {{ pagination(pagers.accounts) }}
       </section>
 
       <section>
-        <h2>最近帖子</h2>
+        <h2>最近帖子 <span class="badge">{{ pagers.posts.total }}</span></h2>
         <table>
           <thead><tr><th>ID</th><th>博主</th><th>发布时间</th><th>状态</th><th>正文</th><th>操作</th></tr></thead>
           <tbody>
@@ -132,11 +147,12 @@
             {% endfor %}
           </tbody>
         </table>
+        {{ pagination(pagers.posts) }}
       </section>
 
       <section>
         <div class="section-head">
-          <h2>推送日志</h2>
+          <h2>推送日志 <span class="badge">{{ pagers.push.total }}</span></h2>
           <form method="post" action="/admin/push-logs/clear" class="inline-form"
                 onsubmit="return confirm('清空全部推送日志？此操作不可恢复。');">
             <button type="submit" class="danger">清空推送日志</button>
@@ -152,11 +168,12 @@
             {% endfor %}
           </tbody>
         </table>
+        {{ pagination(pagers.push) }}
       </section>
 
       <section>
         <div class="section-head">
-          <h2>抓取日志</h2>
+          <h2>抓取日志 <span class="badge">{{ pagers.crawl.total }}</span></h2>
           <form method="post" action="/admin/crawl-logs/clear" class="inline-form"
                 onsubmit="return confirm('清空全部抓取日志？此操作不可恢复。');">
             <button type="submit" class="danger">清空抓取日志</button>
@@ -172,6 +189,7 @@
             {% endfor %}
           </tbody>
         </table>
+        {{ pagination(pagers.crawl) }}
       </section>
     </main>
   </body>

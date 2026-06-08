@@ -63,69 +63,48 @@ class XueqiuCrawler:
         started = time.perf_counter()
         user_id = xueqiu_user_id or infer_user_id(profile_url)
         async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-            # 第 1 步：建立会话（首次访问首页，自动解决 WAF 挑战）
+            # 第 1 步：建立会话
             await self._ensure_session(client)
 
             # 第 2 步：尝试通过 API 获取帖子
             if user_id:
                 url = "https://xueqiu.com/v4/statuses/user_timeline.json"
                 response = await client.get(url, params={"user_id": user_id, "page": 1, "count": limit})
-                # 如果再次遇到 WAF，重试一次（session 可能过期）
-                if _is_waf_response(response.text):
-                    logger.warning("WAF challenge reappeared on API request, re-solving...")
-                    self._challenge_solved = False
-                    await self._ensure_session(client)
-                    response = await client.get(url, params={"user_id": user_id, "page": 1, "count": limit})
                 if response.status_code == 200 and _looks_like_json(response.text):
                     posts = parse_timeline_json(response.json(), user_id, limit)
                     return CrawlResult(posts=posts, response_status=response.status_code, duration_ms=_elapsed_ms(started))
+                # httpx 失败，直接报错走浏览器降级
+                raise RuntimeError(
+                    f"XUEQIU_HTTP_FAILED: API returned status {response.status_code}, "
+                    "falling back to browser crawler."
+                )
 
-            # 第 3 步：API 失败时降级解析个人主页 HTML
+            # 第 3 步：无 user_id 时降级解析个人主页 HTML
             response = await client.get(profile_url)
-            if _is_waf_response(response.text):
-                logger.warning("WAF challenge reappeared on profile page, re-solving...")
-                self._challenge_solved = False
-                await self._ensure_session(client)
-                response = await client.get(profile_url)
             posts = parse_profile_html(response.text, user_id, limit)
             return CrawlResult(posts=posts, response_status=response.status_code, duration_ms=_elapsed_ms(started))
 
     async def _ensure_session(self, client: httpx.AsyncClient) -> None:
-        """确保客户端已建立有效的雪球会话（解决 WAF 挑战）。"""
+        """确保客户端已建立有效的雪球会话。
+
+        注意：纯浏览器方案下，httpx 爬虫不再直接访问雪球，
+        仅当配置了有效 XUEQIU_COOKIE 时才尝试，否则快速失败触发浏览器降级。
+        """
         if self._challenge_solved:
             return
 
-        # 如果有用户提供的 cookie，直接使用，跳过首页访问（避免 cookie 被覆写）
+        # 如果有用户提供的 cookie，尝试直接使用
         if self._cookie_str:
             logger.info("Using configured XUEQIU_COOKIE from .env")
             _set_cookies_from_string(client, self._cookie_str)
             self._challenge_solved = True
             return
 
-        # 访问首页以触发/检查 WAF
-        resp = await client.get("https://xueqiu.com/", headers=self._base_headers())
-
-        if resp.status_code == 403:
-            # IP 被雪球限制，httpx 无法使用，需要浏览器降级
-            raise RuntimeError(
-                "XUEQIU_IP_BLOCKED: HTTP 403 from xueqiu.com. "
-                "Plesae use browser crawler fallback."
-            )
-
-        if _is_waf_response(resp.text):
-            logger.info("Detected Aliyun WAF challenge...")
-            solved = await self._solve_waf(client, resp.text)
-            if not solved:
-                # 新版 WAF 无法通过算法求解，但访问首页已获得 session cookie，
-                # API 端点（user_timeline.json）不需要 WAF 解决，session cookie 足够
-                logger.warning(
-                    "WAF challenge could not be solved via algorithm, "
-                    "but API calls may still work with session cookies."
-                )
-        else:
-            logger.info("Xueqiu session established successfully.")
-
-        self._challenge_solved = True
+        # 没有 Cookie，httpx 无法绕过 WAF，快速失败
+        raise RuntimeError(
+            "XUEQIU_NO_COOKIE: No XUEQIU_COOKIE configured, "
+            "falling back to browser-based crawler."
+        )
 
     async def _solve_waf(self, client: httpx.AsyncClient, challenge_html: str) -> bool:
         """解决 WAF 挑战并设置 cookie。"""

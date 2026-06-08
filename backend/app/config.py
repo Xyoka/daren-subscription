@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     def resolved_database_url(self) -> str:
         """自动检测数据库连接：优先使用 CloudBase MySQL 环境变量，其次使用配置的 database_url"""
+        from urllib.parse import quote
+
         # CloudBase Run 会自动注入 TCB_MYSQL_* 环境变量
         tcb_uri = os.environ.get("TCB_MYSQL_CONNECTION_URI")
         if tcb_uri:
@@ -50,7 +52,9 @@ class Settings(BaseSettings):
             tcb_user = os.environ.get("TCB_MYSQL_USER", "root")
             tcb_pass = os.environ.get("TCB_MYSQL_PASSWORD", "")
             tcb_db = os.environ.get("TCB_MYSQL_DATABASE", "")
-            return f"mysql+pymysql://{tcb_user}:{tcb_pass}@{tcb_host}:{tcb_port}/{tcb_db}?charset=utf8mb4"
+            # URL 编码密码中的特殊字符（如 ! @ : /）
+            tcb_pass_encoded = quote(tcb_pass, safe="")
+            return f"mysql+pymysql://{tcb_user}:{tcb_pass_encoded}@{tcb_host}:{tcb_port}/{tcb_db}?charset=utf8mb4"
 
         return self.database_url
 
